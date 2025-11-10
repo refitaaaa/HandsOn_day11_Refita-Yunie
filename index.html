@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Repository Viewer - HandsOn Day 11</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #fff;
+    color: #24292e;
+    margin: 20px auto;
+    max-width: 900px;
+  }
+  h1 {
+    color: #0366d6;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 15px;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid #ddd;
+    vertical-align: middle;
+  }
+  th {
+    background-color: #f6f8fa;
+    font-weight: 600;
+  }
+  tr:hover {
+    background-color: #f1f8ff;
+  }
+  tr.folder {
+    cursor: pointer;
+    font-weight: 600;
+    color: #0366d6;
+  }
+  tr.folder:hover {
+    text-decoration: underline;
+  }
+  .indent {
+    padding-left: 20px;
+  }
+  #file-content {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f6f8fa;
+    border: 1px solid #ddd;
+    font-family: monospace;
+    white-space: pre-wrap;
+    max-height: 400px;
+    overflow: auto;
+  }
+  .icon-folder::before {
+    content: "📁";
+    margin-right: 8px;
+  }
+  .icon-file::before {
+    content: "📄";
+    margin-right: 8px;
+  }
+  .loading {
+    color: #888;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+  <h1>Repository Files Viewer</h1>
+  <p>Menampilkan isi repository dengan navigasi folder dan preview file.</p>
+
+  <table id="repo-table" aria-label="Repository files and folders">
+    <thead>
+      <tr>
+        <th>Nama File / Folder</th>
+        <th>Commit Terakhir</th>
+        <th>Waktu Commit</th>
+      </tr>
+    </thead>
+    <tbody id="repo-body">
+      <tr><td class="loading" colspan="3">Memuat data repository...</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Isi File:</h3>
+  <pre id="file-content">Klik file untuk melihat isi kode di sini.</pre>
+
+<script>
+  const repo = "refitaaaa/HandsOn_day11_Refita-Yunie";
+  const apiUrl = `https://api.github.com/repos/${repo}/contents/`;
+  const commitApiUrl = `https://api.github.com/repos/${repo}/commits`;
+
+  const repoBody = document.getElementById("repo-body");
+  const fileContent = document.getElementById("file-content");
+
+  // Cache untuk menyimpan folder yang telah di-expand, agar tidak fetch ulang
+  const expandedFolders = new Set();
+
+  // Simpan data isi repo agar bisa akses parent/child lebih mudah
+  const repoDataMap = new Map();
+
+  // Format waktu commit dari ISO ke lebih user-friendly
+  function formatDate(isoDate) {
+    const date = new Date(isoDate);
+    return date.toLocaleString();
+  }
+
+  // Fungsi fetch isi folder dan tampilkan dalam table, dengan indent dan parentId (untuk nested)
+  async function loadFolder(url = apiUrl, indentLevel = 0, parentId = "") {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to fetch folder");
+      const data = await res.json();
+
+      for (const item of data) {
+        repoDataMap.set(item.path, item);
+
+        // Ambil commit terakhir untuk file/folder tersebut
+        const commitInfo = await fetchLatestCommit(item.path);
+
+        // Buat elemen row
+        const tr = document.createElement("tr");
+        tr.dataset.path = item.path;
+        tr.dataset.url = item.url;
+        tr.dataset.type = item.type;
+        tr.dataset.parent = parentId;
+        tr.style.borderBottom = "1px solid #ddd";
+
+        // Warna dan font untuk folder/file
+        if (item.type === "dir") {
+          tr.classList.add("folder");
+        }
+
+        // Kolom Nama file/folder dengan indentasi
+        const tdName = document.createElement("td");
+        tdName.style.paddingLeft = (20 * indentLevel) + "px";
+        tdName.textContent = item.name;
+        tdName.className = item.type === "dir" ? "icon-folder" : "icon-file";
+
+        tr.appendChild(tdName);
+        
+        // Kolom commit terakhir
+        const tdCommit = document.createElement("td");
+        tdCommit.textContent = commitInfo.message || "-";
+        tr.appendChild(tdCommit);
+
+        // Kolom waktu commit
+        const tdDate = document.createElement("td");
+        tdDate.textContent = commitInfo.date ? formatDate(commitInfo.date) : "-";
+        tr.appendChild(tdDate);
+
+        // Tambahkan row ke tbody
+        repoBody.appendChild(tr);
+      }
+    } catch (err) {
+      repoBody.innerHTML = `<tr><td colspan="3" style="color:red;">Gagal memuat repository: ${err.message}</td></tr>`;
+    }
+  }
+
+  // Fetch commit terakhir untuk file atau folder path tertentu
+  async function fetchLatestCommit(path) {
+    try {
+      const url = `${commitApiUrl}?path=${encodeURIComponent(path)}&per_page=1`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Commit fetch error");
+      const data = await res.json();
+      if (data.length === 0) return {};
+      const commit = data[0].commit;
+      return {
+        message: commit.message,
+        date: commit.author.date,
+      };
+    } catch {
+      return {};
+    }
+  }
+
+  // Event listener klik pada table agar bisa expand folder atau preview file
+  repoBody.addEventListener("click", async (evt) => {
+    let tr = evt.target;
+    // Klik bisa terjadi pada td, cari parent tr
+    while (tr && tr.tagName.toLowerCase() !== "tr") {
+      tr = tr.parentElement;
+    }
+    if (!tr) return;
+
+    const type = tr.dataset.type;
+    const path = tr.dataset.path;
+
+    if (type === "dir") {
+      // Expand / Collapse folder
+      if (expandedFolders.has(path)) {
+        collapseFolder(path);
+      } else {
+        await expandFolder(path, tr);
+      }
+    } else {
+      // File diklik: tampilkan isi file
+      showFileContent(tr.dataset.url);
+    }
+  });
+
+  // Fungsi expand folder: load isi folder dan masukkan baris di bawah parent
+  async function expandFolder(path, parentTr) {
+    if (expandedFolders.has(path)) return; // Sudah di-expand
+
+    const folderItem = repoDataMap.get(path);
+    if (!folderItem) return;
+
+    try {
+      const res = await fetch(folderItem.url);
+      if (!res.ok) throw new Error("Gagal load isi folder");
+      const data = await res.json();
+
+      const parentIndex = Array.from(repoBody.children).indexOf(parentTr);
+
+      // Masukkan baris baru di bawah parent dengan indent +1
+      let insertIndex = parentIndex + 1;
+      for (const item of data) {
+        repoDataMap.set(item.path, item);
+
+        const commitInfo = await fetchLatestCommit(item.path);
+
+        const tr = document.createElement("tr");
+        tr.dataset.path = item.path;
+        tr.dataset.url = item.url;
+        tr.dataset.type = item.type;
+        tr.dataset.parent = path;
+        if (item.type === "dir") {
+          tr.classList.add("folder");
+        }
+
+        const tdName = document.createElement("td");
+        tdName.style.paddingLeft = parseInt(parentTr.firstChild.style.paddingLeft || 0) + 20 + "px";
+        tdName.textContent = item.name;
+        tdName.className = item.type === "dir" ? "icon-folder" : "icon-file";
+
+        tr.appendChild(tdName);
+
+        const tdCommit = document.createElement("td");
+        tdCommit.textContent = commitInfo.message || "-";
+        tr.appendChild(tdCommit);
+
+        const tdDate = document.createElement("td");
+        tdDate.textContent = commitInfo.date ? formatDate(commitInfo.date) : "-";
+        tr.appendChild(tdDate);
+
+        repoBody.insertBefore(tr, repoBody.children[insertIndex]);
+        insertIndex++;
+      }
+
+      expandedFolders.add(path);
+      // Ubah style parent folder (misal menambah tanda ▼)
+      parentTr.firstChild.textContent = "📂 " + parentTr.firstChild.textContent.replace(/^📁\s*/, "") + " ▼";
+
+    } catch(err) {
+      alert(err.message);
+    }
+  }
+
+  // Fungsi collapse folder: hapus semua baris anak folder dari DOM
+  function collapseFolder(path) {
+    const childRows = Array.from(repoBody.children).filter(tr => tr.dataset.parent === path);
+    for (const row of childRows) {
+      if (expandedFolders.has(row.dataset.path)) {
+        // Jika anak ini folder yang sudah di-expand, collapse dulu rekursif
+        collapseFolder(row.dataset.path);
+      }
+      row.remove();
+      expandedFolders.delete(row.dataset.path);
+    }
+    expandedFolders.delete(path);
+
+    // Kembalikan icon folder parent ke awal (hilangkan ▼)
+    const parentTr = Array.from(repoBody.children).find(tr => tr.dataset.path === path);
+    if (parentTr) {
+      parentTr.firstChild.textContent = "📁 " + parentTr.firstChild.textContent.replace(/^📂 | ▼/g, "");
+    }
+  }
+
+  // Fungsi fetch dan tampilkan isi file di preview
+  async function showFileContent(url) {
+    fileContent.textContent = "Loading file content...";
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Gagal memuat isi file.");
+      const data = await res.json();
+
+      // Isi file ada di property content, base64 encoded
+      const contentEncoded = data.content || "";
+      const content = atob(contentEncoded.replace(/\n/g, ""));
+      fileContent.textContent = content;
+
+    } catch (err) {
+      fileContent.textContent = err.message;
+    }
+  }
+
+  // Load root folder saat halaman dimuat
+  window.onload = () => {
+    repoBody.innerHTML = "";
+    loadFolder();
+  };
+
+</script>
+</body>
+</html>
