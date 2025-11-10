@@ -1,17 +1,2 @@
-# working_with_asset
-
-A new Flutter project.
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
-# HandsOn_day11_Refita-Yunie
+📂 Deskripsi Tugas
+Pada tugas HandsOn Day 11 ini, saya belajar tentang working with assets di bahasa pemrograman Dart menggunakan Visual Studio Code (VSCode). Fokus utama dari tugas ini adalah bagaimana mengelola dan menampilkan berbagai jenis aset (seperti gambar, ikon, dan file lainnya) dalam proyek Dart, khususnya untuk aplikasi berbasis Flutter atau Dart CLI.
